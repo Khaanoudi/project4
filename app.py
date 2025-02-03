@@ -265,9 +265,10 @@ def display_company_analysis(entity):
             
             with col2:
                 volume_change = ((latest['Volume']/prev['Volume'])-1)*100
+                formatted_volume = "{:,}".format(int(latest['Volume']))
                 st.metric(
                     "Volume",
-                    f"{int(latest['Volume']:,)}",
+                    formatted_volume,
                     f"{volume_change:+.2f}%"
                 )
             
