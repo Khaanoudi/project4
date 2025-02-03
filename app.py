@@ -6,6 +6,7 @@ from sentiment_analyzer import SentimentAnalyzer
 from technical_analyzer import TechnicalAnalyzer
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from sentiment_utils import get_sentiment_category, filter_articles_by_sentiment
 
 # Configure the page
 st.set_page_config(
@@ -15,7 +16,7 @@ st.set_page_config(
 )
 
 # API configuration
-API_KEY = "bS2jganHVlFYtAly7ttdHYLrTB0s6BmONWmFEApD"
+API_KEY = "your_api_key_here"
 BASE_URL = "https://api.stockdata.org/v1/news/all"
 
 # Initialize sentiment analyzer
