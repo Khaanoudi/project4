@@ -232,78 +232,84 @@ def display_sentiment(article):
     if article.get("entities"):
         for entity in article["entities"]:
             if "sentiment_score" in entity:
-                display_technical_analysis(entity, entity["sentiment_score"])
+                display_company_analysis(entity)
 
-def display_technical_analysis(entity, sentiment_score):
-    """Display technical analysis for a stock"""
-    analyzer = get_technical_analyzer()
-    
+def display_company_analysis(entity):
+    """Display technical analysis for a single company"""
     try:
+        analyzer = get_technical_analyzer()
+        
         # Fetch and analyze stock data
         df = analyzer.fetch_stock_data(entity['symbol'])
         df = analyzer.calculate_indicators(df)
         signals = analyzer.get_trading_signals(df)
-        recommendation = analyzer.get_recommendation(signals, sentiment_score)
+        recommendation = analyzer.get_recommendation(
+            signals, 
+            entity.get("sentiment_score", 0.5)
+        )
         
-        # Display technical chart
-        fig = plot_technical_chart(df, entity['symbol'])
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Display trading signals
-        st.markdown("### 📈 Trading Signals")
-        cols = st.columns(len(signals))
-        for col, (indicator, signal, emoji) in zip(cols, signals):
-            with col:
-                st.markdown(f"""
-                <div style='text-align: center; padding: 10px; background-color: #f8f9fa; border-radius: 5px;'>
-                    <h4>{emoji} {indicator}</h4>
-                    <p>{signal}</p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Display recommendation
-        st.markdown("### 🎯 Trading Recommendation")
-        st.markdown(f"""
-        <div style='padding: 20px; background-color: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
-            <h2 style='text-align: center; color: {
-                "#28a745" if recommendation["action"].startswith("Buy") 
-                else "#dc3545" if recommendation["action"].startswith("Sell")
-                else "#ffc107"
-            };'>
-                {recommendation["emoji"]} {recommendation["action"]}
-            </h2>
-            <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
-                <div>
-                    <p style='color: #6c757d;'>Confidence</p>
-                    <p style='font-weight: bold;'>{recommendation["confidence"]}</p>
-                </div>
-                <div>
-                    <p style='color: #6c757d;'>Risk Level</p>
-                    <p style='font-weight: bold;'>{recommendation["risk_level"]}</p>
-                </div>
+        # Create expandable section for technical analysis
+        with st.expander(f"📊 Technical Analysis for {entity['name']}", expanded=True):
+            # Price and Volume metrics
+            col1, col2, col3 = st.columns(3)
+            latest = df.iloc[-1]
+            prev = df.iloc[-2]
+            
+            with col1:
+                price_change = ((latest['Close']/prev['Close'])-1)*100
+                st.metric(
+                    "Current Price",
+                    f"SAR {latest['Close']:.2f}",
+                    f"{price_change:+.2f}%"
+                )
+            
+            with col2:
+                volume_change = ((latest['Volume']/prev['Volume'])-1)*100
+                st.metric(
+                    "Volume",
+                    f"{int(latest['Volume']:,)}",
+                    f"{volume_change:+.2f}%"
+                )
+            
+            with col3:
+                st.metric("RSI", f"{latest['RSI']:.2f}")
+            
+            # Trading signals in a compact format
+            st.markdown("##### Trading Signals:")
+            signal_cols = st.columns(len(signals))
+            for col, (indicator, signal, emoji) in zip(signal_cols, signals):
+                with col:
+                    st.markdown(f"""
+                    <div style='text-align: center; padding: 8px; background-color: #f8f9fa; 
+                         border-radius: 5px; margin: 2px;'>
+                        <p style='margin: 0; font-weight: bold;'>{emoji} {indicator}</p>
+                        <p style='margin: 0; font-size: 0.9em;'>{signal}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Recommendation
+            st.markdown("##### Recommendation:")
+            st.markdown(f"""
+            <div style='padding: 10px; background-color: {
+                "#d4edda" if recommendation["action"].startswith("Buy")
+                else "#f8d7da" if recommendation["action"].startswith("Sell")
+                else "#fff3cd"
+            }; border-radius: 5px; margin: 5px 0;'>
+                <h4 style='margin: 0; text-align: center;'>
+                    {recommendation["emoji"]} {recommendation["action"]}
+                </h4>
+                <p style='margin: 5px 0; text-align: center; font-size: 0.9em;'>
+                    Confidence: {recommendation["confidence"]} | Risk: {recommendation["risk_level"]}
+                </p>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display latest statistics
-        latest = df.iloc[-1]
-        st.markdown("### 📊 Latest Statistics")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Price", f"SAR {latest['Close']:.2f}", 
-                     f"{((latest['Close']/df.iloc[-2]['Close'])-1)*100:.2f}%")
-        
-        with col2:
-            volume_change = ((latest['Volume']/df.iloc[-2]['Volume'])-1)*100
-            st.metric("Volume", f"{int(latest['Volume']):,}", 
-                     f"{volume_change:.2f}%")
-        
-        with col3:
-            st.metric("RSI", f"{latest['RSI']:.2f}")
-        
+            """, unsafe_allow_html=True)
+            
+            # Technical chart
+            fig = plot_technical_chart(df, entity['symbol'])
+            st.plotly_chart(fig, use_container_width=True)
+            
     except Exception as e:
-        st.error(f"Error fetching technical data: {str(e)}")
+        st.error(f"Unable to analyze {entity['symbol']}: {str(e)}")
 
 def main():
     st.title("🇸🇦 Saudi Stock Market News")
@@ -330,17 +336,11 @@ def main():
     news_data = fetch_news(days_ago)
     
     if news_data and "data" in news_data:
-        # Filter articles based on sentiment
-        filtered_articles = []
-        for article in news_data["data"]:
-            if article.get("entities"):
-                article_sentiments = [get_sentiment_category(entity["sentiment_score"]) 
-                                   for entity in article["entities"] 
-                                   if "sentiment_score" in entity]
-                if any(sentiment in sentiment_filter for sentiment in article_sentiments):
-                    filtered_articles.append(article)
+        filtered_articles = filter_articles_by_sentiment(
+            news_data["data"], 
+            sentiment_filter
+        )
         
-        # Display total articles found
         st.caption(f"Found {len(filtered_articles)} articles matching your filters")
         
         for article in filtered_articles:
@@ -358,9 +358,10 @@ def main():
                     st.write(article["description"])
                     
                     if article.get("entities"):
-                        st.markdown("**Related Companies:**")
+                        st.markdown("### Related Companies Analysis")
                         for entity in article["entities"]:
-                            st.markdown(f"- {entity['name']} ({entity['symbol']})")
+                            st.markdown(f"#### {entity['name']} ({entity['symbol']})")
+                            display_company_analysis(entity)
                     
                     st.markdown(f"[Read full article]({article['url']})")
                 
