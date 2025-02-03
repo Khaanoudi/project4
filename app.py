@@ -3,6 +3,9 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from sentiment_analyzer import SentimentAnalyzer
+from technical_analyzer import TechnicalAnalyzer
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Configure the page
 st.set_page_config(
@@ -19,6 +22,11 @@ BASE_URL = "https://api.stockdata.org/v1/news/all"
 @st.cache_resource
 def get_sentiment_analyzer():
     return SentimentAnalyzer()
+
+# Initialize technical analyzer
+@st.cache_resource
+def get_technical_analyzer():
+    return TechnicalAnalyzer()
 
 def fetch_news(days_ago=7):
     # Calculate date N days ago
@@ -46,6 +54,62 @@ def get_sentiment_category(score):
     elif score < 0.4:
         return "Negative"
     return "Neutral"
+
+def plot_technical_chart(df, symbol):
+    """Create an interactive technical analysis chart"""
+    fig = make_subplots(rows=3, cols=1, 
+                       shared_xaxes=True,
+                       vertical_spacing=0.03,
+                       row_heights=[0.6, 0.2, 0.2])
+    
+    # Candlestick chart
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        name='Price'
+    ), row=1, col=1)
+    
+    # Add moving averages
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df['SMA_20'],
+        name='SMA 20',
+        line=dict(color='orange')
+    ), row=1, col=1)
+    
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df['SMA_50'],
+        name='SMA 50',
+        line=dict(color='blue')
+    ), row=1, col=1)
+    
+    # Volume chart
+    fig.add_trace(go.Bar(
+        x=df.index, y=df['Volume'],
+        name='Volume',
+        marker_color='rgba(0,0,255,0.3)'
+    ), row=2, col=1)
+    
+    # RSI
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df['RSI'],
+        name='RSI',
+        line=dict(color='purple')
+    ), row=3, col=1)
+    
+    # Update layout
+    fig.update_layout(
+        title=f'{symbol} Technical Analysis',
+        yaxis_title='Price',
+        yaxis2_title='Volume',
+        yaxis3_title='RSI',
+        xaxis_rangeslider_visible=False,
+        height=800
+    )
+    
+    return fig
 
 def display_sentiment_comparison(entity, text, parent_container):
     """Display comparison between API and calculated sentiment"""
@@ -163,6 +227,83 @@ def display_sentiment(article):
                                 f"{article['title']} {article['description']}",
                                 st
                             )
+
+    # Add technical analysis after sentiment
+    if article.get("entities"):
+        for entity in article["entities"]:
+            if "sentiment_score" in entity:
+                display_technical_analysis(entity, entity["sentiment_score"])
+
+def display_technical_analysis(entity, sentiment_score):
+    """Display technical analysis for a stock"""
+    analyzer = get_technical_analyzer()
+    
+    try:
+        # Fetch and analyze stock data
+        df = analyzer.fetch_stock_data(entity['symbol'])
+        df = analyzer.calculate_indicators(df)
+        signals = analyzer.get_trading_signals(df)
+        recommendation = analyzer.get_recommendation(signals, sentiment_score)
+        
+        # Display technical chart
+        fig = plot_technical_chart(df, entity['symbol'])
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display trading signals
+        st.markdown("### 📈 Trading Signals")
+        cols = st.columns(len(signals))
+        for col, (indicator, signal, emoji) in zip(cols, signals):
+            with col:
+                st.markdown(f"""
+                <div style='text-align: center; padding: 10px; background-color: #f8f9fa; border-radius: 5px;'>
+                    <h4>{emoji} {indicator}</h4>
+                    <p>{signal}</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Display recommendation
+        st.markdown("### 🎯 Trading Recommendation")
+        st.markdown(f"""
+        <div style='padding: 20px; background-color: #f8f9fa; border-radius: 10px; margin: 10px 0;'>
+            <h2 style='text-align: center; color: {
+                "#28a745" if recommendation["action"].startswith("Buy") 
+                else "#dc3545" if recommendation["action"].startswith("Sell")
+                else "#ffc107"
+            };'>
+                {recommendation["emoji"]} {recommendation["action"]}
+            </h2>
+            <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
+                <div>
+                    <p style='color: #6c757d;'>Confidence</p>
+                    <p style='font-weight: bold;'>{recommendation["confidence"]}</p>
+                </div>
+                <div>
+                    <p style='color: #6c757d;'>Risk Level</p>
+                    <p style='font-weight: bold;'>{recommendation["risk_level"]}</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Display latest statistics
+        latest = df.iloc[-1]
+        st.markdown("### 📊 Latest Statistics")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Price", f"SAR {latest['Close']:.2f}", 
+                     f"{((latest['Close']/df.iloc[-2]['Close'])-1)*100:.2f}%")
+        
+        with col2:
+            volume_change = ((latest['Volume']/df.iloc[-2]['Volume'])-1)*100
+            st.metric("Volume", f"{int(latest['Volume']):,}", 
+                     f"{volume_change:.2f}%")
+        
+        with col3:
+            st.metric("RSI", f"{latest['RSI']:.2f}")
+        
+    except Exception as e:
+        st.error(f"Error fetching technical data: {str(e)}")
 
 def main():
     st.title("🇸🇦 Saudi Stock Market News")
