@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # API configuration
-API_KEY = "bS2jganHVlFYtAly7ttdHYLrTB0s6BmONWmFEApD"  # Updated API key
+API_KEY = "XECKikofDwF92a9HddSMmHjDwXFiCie5MfOtk1SK"  # Updated API key
 BASE_URL = "https://api.stockdata.org/v1/news/all"
 
 # Initialize sentiment analyzer
