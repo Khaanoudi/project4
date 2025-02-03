@@ -1,0 +1,9 @@
+streamlit
+requests
+pandas
+python-dotenv
+nltk
+textblob
+numpy
+yfinance
+plotly 
